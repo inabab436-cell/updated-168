@@ -2157,15 +2157,52 @@ export const Route = createFileRoute("/api/chat-ai")({
             }
             const { quoteCart } = await import("@/lib/offer-engine.server");
             const quote = quoteCart(liveOffers, lines, currency);
+            // NEAR-MISS: how many MORE of the same eligible product unlock the
+            // offer, and what the customer would pay then. Computed here so the
+            // agent never has to reason about it (and never stays silent).
+            const { unitsToReachMinimum } = await import("@/lib/offer-upsell");
+            const near_miss = quote.offers
+              .filter((e) => e.reason === "eligible_subtotal_below_minimum" && e.product_id)
+              .map((e) => {
+                const line = lines.find((l) => l.product_id === String(e.product_id));
+                const unit = line?.unit_price ?? 0;
+                const extra = unitsToReachMinimum(unit, e.shortfall);
+                if (!extra) return null;
+                const newQty = (line?.quantity ?? 0) + extra;
+                const newLines = lines.map((l) =>
+                  l.product_id === String(e.product_id) ? { ...l, quantity: newQty } : l,
+                );
+                const better = quoteCart(liveOffers, newLines, currency);
+                return {
+                  offer_id: e.offer_id,
+                  title: e.title,
+                  product_id: e.product_id,
+                  product_name: line?.name ?? null,
+                  unit_price: unit,
+                  shortfall: e.shortfall,
+                  extra_units_needed: extra,
+                  quantity_that_unlocks: newQty,
+                  subtotal_if_taken: better.subtotal,
+                  discount_if_taken: better.discount_total,
+                  total_if_taken: better.total,
+                };
+              })
+              .filter(Boolean);
             return {
               result: {
                 ok: true,
                 ...quote,
                 ...(unknown.length ? { unknown_product_ids: unknown } : {}),
+                ...(near_miss.length ? { near_miss } : {}),
                 rule:
-                  "The numbers above are final. Prices of products outside a product-scoped offer are NEVER counted toward its minimum and NEVER discounted. Do not recompute, do not round differently, and never suggest adding a non-eligible product to reach an offer minimum.",
+                  "The numbers above are final. Prices of products outside a product-scoped offer are NEVER counted toward its minimum and NEVER discounted. Do not recompute, do not round differently, and never suggest adding a non-eligible product to reach an offer minimum." +
+                  (near_miss.length
+                    ? " near_miss is MANDATORY to mention once, in one short sentence, using these exact numbers: say the offer exists, that the current request is below its minimum, and what the discount and the total would be at quantity_that_unlocks. Offer it as a free choice, never insist, never repeat it, and if the customer declines continue with the original quantity at full price."
+                    : "") +
+                  " Whatever total you state to the customer must be exactly the total field above, in this message and in every later message including the final confirmation.",
               },
             };
+
           }
 
 
