@@ -1766,6 +1766,37 @@ export const Route = createFileRoute("/api/chat-ai")({
             }
           }
 
+          // OFFICIAL PRICE OF THE ORDER ON THE TABLE — recomputed every turn by
+          // the same engine that prices the stored order, so a granted discount
+          // can never be forgotten later in the conversation.
+          let orderPricingFactsBlock = "";
+          try {
+            const items = Array.isArray(latestConversationOrder?.items)
+              ? (latestConversationOrder!.items as any[])
+              : [];
+            if (items.length) {
+              const { priceOrderItems } = await import("@/lib/order-pricing.server");
+              const { buildOrderPricingFactsBlock } = await import("@/lib/offer-upsell");
+              const pricing = priceOrderItems({
+                products: merchantData.products as any,
+                offers: liveOffers,
+                items: items as any,
+              });
+              orderPricingFactsBlock = buildOrderPricingFactsBlock({
+                currency: pricing.currency,
+                subtotal: pricing.subtotal,
+                discount_total: pricing.discount_total,
+                total: pricing.total,
+                applied_offers: pricing.applied_offers.map((o) => ({
+                  title: o.title,
+                  discount_amount: o.discount_amount,
+                })),
+              });
+            }
+          } catch {
+            console.error("[chat-ai] order pricing facts skipped");
+          }
+
 
 
           let profileLines: string[] = [];
