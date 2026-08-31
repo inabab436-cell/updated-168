@@ -2535,6 +2535,8 @@ export const Route = createFileRoute("/api/chat-ai")({
             ragBlock +
             shippingLookupBlock +
             offersBlock +
+            orderPricingFactsBlock +
+
             missingInfoStatusBlock +
             matchedProductBlock +
             liveAvailabilityBlock +
