@@ -1744,11 +1744,28 @@ export const Route = createFileRoute("/api/chat-ai")({
                 const currency =
                   merchantData.products.find((p) => p.currency)?.currency ?? null;
                 offersBlock = buildOffersBlock(snapshot, nameById, currency);
+                // NEAR-MISS: the agent must know, in numbers, how far the
+                // customer is from a live offer — silence about it was the bug.
+                const { computeOfferUpsells, buildOfferUpsellBlock } = await import(
+                  "@/lib/offer-upsell"
+                );
+                offersBlock += buildOfferUpsellBlock(
+                  computeOfferUpsells(
+                    liveOffers,
+                    merchantData.products.map((p) => ({
+                      id: String(p.id),
+                      name: String(p.name ?? ""),
+                      price: (p as any).price ?? null,
+                    })),
+                  ),
+                  currency,
+                );
               } catch (e) {
                 console.error("[chat-ai] offers read skipped");
               }
             }
           }
+
 
 
           let profileLines: string[] = [];
